@@ -1,0 +1,7 @@
+{
+  "name": "IRONFLOW — Treino Inteligente & Evolução",
+  "description": "Aplicativo premium de musculação, progressão de cargas, treinos personalizados e personal trainer IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
