@@ -16,13 +16,16 @@ import { INITIAL_BODY_MEASUREMENTS, INITIAL_USER_PROFILE, INITIAL_WORKOUT_HISTOR
 import { calculateWorkoutVolume } from '../utils/progressionEngine';
 import { soundService } from '../utils/audioAlerts';
 
-interface RestTimerState {
+export interface RestTimerState {
   isActive: boolean;
   isPaused: boolean;
   totalSeconds: number;
   remainingSeconds: number;
   targetEndTime: number | null;
   exerciseName?: string;
+  nextSetNumber?: number;
+  totalSets?: number;
+  isFinishedAlertOpen: boolean;
 }
 
 interface AppContextType {
@@ -53,11 +56,12 @@ interface AppContextType {
 
   // Rest Timer
   restTimer: RestTimerState;
-  startRestTimer: (seconds: number, exerciseName?: string) => void;
+  startRestTimer: (seconds: number, exerciseName?: string, nextSetNumber?: number, totalSets?: number) => void;
   adjustRestTimer: (deltaSeconds: number) => void;
   skipRestTimer: () => void;
   pauseRestTimer: () => void;
   resumeRestTimer: () => void;
+  dismissRestFinishedAlert: () => void;
 
   // History & Progress
   history: CompletedWorkoutSession[];
@@ -144,7 +148,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...parsed,
             remainingSeconds: remaining,
-            isActive: remaining > 0
+            isActive: remaining > 0,
+            isFinishedAlertOpen: false
           };
         }
       } catch {
@@ -156,7 +161,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isPaused: false,
       totalSeconds: 90,
       remainingSeconds: 0,
-      targetEndTime: null
+      targetEndTime: null,
+      isFinishedAlertOpen: false
     };
   });
 
@@ -222,13 +228,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           soundService.playRestCompleteChime();
         }
         if (userProfile.vibrationEnabled) {
-          soundService.vibrate([250, 100, 250]);
+          soundService.vibrate([300, 150, 400]);
         }
         setRestTimer(prev => ({
           ...prev,
           isActive: false,
           remainingSeconds: 0,
-          targetEndTime: null
+          targetEndTime: null,
+          isFinishedAlertOpen: true
         }));
       } else {
         setRestTimer(prev => ({
@@ -405,7 +412,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // If marked as completed, trigger rest timer
     if (isNowCompleted) {
-      startRestTimer(currentEx.restSeconds || 90, currentEx.exerciseName);
+      soundService.unlockAudio();
+      startRestTimer(
+        currentEx.restSeconds || 90,
+        currentEx.exerciseName,
+        setIndex + 2,
+        currentEx.sets.length
+      );
     }
   };
 
@@ -541,7 +554,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // --- Rest Timer Actions ---
-  const startRestTimer = (seconds: number, exerciseName?: string) => {
+  const startRestTimer = (seconds: number, exerciseName?: string, nextSetNumber?: number, totalSets?: number) => {
+    soundService.unlockAudio();
     const targetEndTime = Date.now() + seconds * 1000;
     setRestTimer({
       isActive: true,
@@ -549,7 +563,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       totalSeconds: seconds,
       remainingSeconds: seconds,
       targetEndTime,
-      exerciseName
+      exerciseName,
+      nextSetNumber,
+      totalSets,
+      isFinishedAlertOpen: false
     });
   };
 
@@ -568,13 +585,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const skipRestTimer = () => {
-    setRestTimer({
+    setRestTimer(prev => ({
+      ...prev,
       isActive: false,
       isPaused: false,
       totalSeconds: 90,
       remainingSeconds: 0,
-      targetEndTime: null
-    });
+      targetEndTime: null,
+      isFinishedAlertOpen: false
+    }));
     localStorage.removeItem(STORAGE_KEYS.REST_TIMER);
   };
 
@@ -595,6 +614,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         targetEndTime
       };
     });
+  };
+
+  const dismissRestFinishedAlert = () => {
+    setRestTimer(prev => ({
+      ...prev,
+      isFinishedAlertOpen: false
+    }));
   };
 
   // --- History & Measurements Actions ---
@@ -685,6 +711,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         skipRestTimer,
         pauseRestTimer,
         resumeRestTimer,
+        dismissRestFinishedAlert,
         history,
         deleteHistorySession,
         getPreviousPerformance,

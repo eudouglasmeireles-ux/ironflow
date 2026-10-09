@@ -15,7 +15,11 @@ import {
   Dumbbell,
   Sparkles,
   X,
-  Share2
+  Play,
+  Pause,
+  FastForward,
+  BellRing,
+  Timer
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -32,7 +36,12 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
     replaceExerciseInActiveSession,
     finishActiveWorkout,
     cancelActiveWorkout,
-    startRestTimer
+    restTimer,
+    adjustRestTimer,
+    skipRestTimer,
+    pauseRestTimer,
+    resumeRestTimer,
+    dismissRestFinishedAlert
   } = useApp();
 
   const [activeExIdx, setActiveExIdx] = useState(0);
@@ -48,6 +57,10 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
 
   const currentExercise = activeSession.exercises[activeExIdx] || activeSession.exercises[0];
   const dbEx = getExerciseById(currentExercise.exerciseId);
+
+  // Active uncompleted set index
+  const activeSetIndex = currentExercise.sets.findIndex(s => !s.completed);
+  const activeSet = activeSetIndex !== -1 ? currentExercise.sets[activeSetIndex] : null;
 
   // Format elapsed time (MM:SS or HH:MM:SS)
   const formatElapsed = (totalSec: number) => {
@@ -91,6 +104,9 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
       onClose();
     }
   };
+
+  // Next exercise helper
+  const hasNextExercise = activeExIdx < activeSession.exercises.length - 1;
 
   return (
     <div className="fixed inset-0 z-50 bg-[#0a0a0d] flex flex-col overflow-hidden text-white">
@@ -180,7 +196,84 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
 
       {/* Main Exercise View Body */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-xl mx-auto w-full pb-28">
-        {/* Exercise Header Card */}
+        
+        {/* 1. PROMINENT AUTOMATIC REST TIMER DISPLAY (Whenever resting) */}
+        {restTimer.isActive && (
+          <div className="bg-gradient-to-br from-[#181824] via-[#12121a] to-[#0c0c10] border-2 border-[#CCFF00] rounded-3xl p-4.5 shadow-2xl shadow-[#CCFF00]/15 animate-in fade-in slide-in-from-top-3 duration-300">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#CCFF00] animate-ping" />
+                <span className="text-xs font-black uppercase tracking-wider text-[#CCFF00] flex items-center gap-1.5">
+                  <Timer size={15} /> Tempo de Descanso Automático
+                </span>
+              </div>
+              <span className="text-[11px] text-zinc-400">
+                {currentExercise.exerciseName}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 py-1">
+              <div>
+                <div className="font-mono-numbers text-5xl font-black text-white tracking-tight flex items-baseline gap-1.5">
+                  {Math.floor(restTimer.remainingSeconds / 60)}:
+                  {restTimer.remainingSeconds % 60 < 10 ? '0' : ''}
+                  {restTimer.remainingSeconds % 60}
+                  <span className="text-xs text-[#CCFF00] font-bold uppercase tracking-wider">
+                    rest
+                  </span>
+                </div>
+                <div className="text-xs text-zinc-400 mt-1">
+                  Próxima: <strong className="text-white">Série {restTimer.nextSetNumber || 2} de {currentExercise.sets.length}</strong>
+                </div>
+              </div>
+
+              {/* Quick Adjustment Steppers */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => adjustRestTimer(-15)}
+                  className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold active:scale-95 transition-all"
+                  title="Diminuir 15s"
+                >
+                  -15s
+                </button>
+                <button
+                  onClick={() => adjustRestTimer(15)}
+                  className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold active:scale-95 transition-all"
+                  title="Adicionar 15s"
+                >
+                  +15s
+                </button>
+                {restTimer.isPaused ? (
+                  <button
+                    onClick={resumeRestTimer}
+                    className="p-2.5 rounded-xl bg-[#CCFF00] text-black font-bold active:scale-95"
+                    title="Retomar"
+                  >
+                    <Play size={18} fill="black" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={pauseRestTimer}
+                    className="p-2.5 rounded-xl bg-zinc-800 text-zinc-200 active:scale-95"
+                    title="Pausar"
+                  >
+                    <Pause size={18} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Skip Button */}
+            <button
+              onClick={skipRestTimer}
+              className="mt-3 w-full py-2.5 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/80 text-zinc-200 font-extrabold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md"
+            >
+              <FastForward size={15} /> Pular Descanso & Começar Série #{restTimer.nextSetNumber || 2} Agora
+            </button>
+          </div>
+        )}
+
+        {/* 2. Exercise Header Card */}
         <div className="bg-[#13131a] border border-zinc-800 rounded-3xl p-4.5 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -245,28 +338,162 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
               Alvo: <strong className="text-white">{currentExercise.sets[0]?.targetReps || '8-12'} reps</strong>
             </span>
             <span className="flex items-center gap-1">
-              Descanso padrão: <strong className="text-white">{currentExercise.restSeconds}s</strong>
+              Descanso configurado: <strong className="text-[#CCFF00]">{currentExercise.restSeconds}s</strong>
             </span>
           </div>
         </div>
 
-        {/* Sets Table */}
+        {/* 3. BIG ACTIVE SET ACTION CARD (Exact user requirement: easy touch to finish set and trigger countdown) */}
+        {activeSet && !restTimer.isActive && (
+          <div className="bg-gradient-to-r from-[#171724] via-[#13131c] to-[#111116] border-2 border-[#CCFF00]/70 p-4.5 rounded-3xl shadow-xl space-y-3 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-[#CCFF00] uppercase tracking-wider flex items-center gap-1.5">
+                <Flame size={16} /> SÉRIE EM ANDAMENTO: #{activeSet.setNumber} DE {currentExercise.sets.length}
+              </span>
+              <span className="text-xs text-zinc-300">
+                Meta: <strong>{activeSet.targetReps} reps</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 bg-zinc-900/70 p-3 rounded-2xl border border-zinc-800">
+              {/* Carga Control */}
+              <div>
+                <label className="text-[11px] font-bold text-zinc-400 uppercase block mb-1">
+                  Carga Real (kg)
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() =>
+                      updateActiveSet(activeExIdx, activeSetIndex, {
+                        actualLoadKg: Math.max(0, activeSet.actualLoadKg - 1)
+                      })
+                    }
+                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold active:scale-95"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={activeSet.actualLoadKg}
+                    onChange={e =>
+                      updateActiveSet(activeExIdx, activeSetIndex, {
+                        actualLoadKg: parseFloat(e.target.value) || 0
+                      })
+                    }
+                    className="w-16 bg-zinc-950 border border-zinc-700 text-center font-mono-numbers font-black text-base py-1 rounded-lg text-white focus:outline-none focus:border-[#CCFF00]"
+                  />
+                  <button
+                    onClick={() =>
+                      updateActiveSet(activeExIdx, activeSetIndex, {
+                        actualLoadKg: activeSet.actualLoadKg + 1
+                      })
+                    }
+                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold active:scale-95"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Reps Control */}
+              <div>
+                <label className="text-[11px] font-bold text-zinc-400 uppercase block mb-1">
+                  Reps Feitas
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() =>
+                      updateActiveSet(activeExIdx, activeSetIndex, {
+                        actualReps: Math.max(1, activeSet.actualReps - 1)
+                      })
+                    }
+                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold active:scale-95"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    value={activeSet.actualReps}
+                    onChange={e =>
+                      updateActiveSet(activeExIdx, activeSetIndex, {
+                        actualReps: parseInt(e.target.value, 10) || 0
+                      })
+                    }
+                    className="w-16 bg-zinc-950 border border-zinc-700 text-center font-mono-numbers font-black text-base py-1 rounded-lg text-white focus:outline-none focus:border-[#CCFF00]"
+                  />
+                  <button
+                    onClick={() =>
+                      updateActiveSet(activeExIdx, activeSetIndex, {
+                        actualReps: activeSet.actualReps + 1
+                      })
+                    }
+                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold active:scale-95"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Big Finish Set Button */}
+            <button
+              onClick={() => completeSet(activeExIdx, activeSetIndex)}
+              className="w-full py-4 bg-[#CCFF00] hover:bg-[#b8e600] active:scale-[0.98] text-black font-black text-sm uppercase rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-[#CCFF00]/30 transition-all cursor-pointer"
+            >
+              <Check size={20} strokeWidth={3} />
+              Terminei a Série #{activeSet.setNumber} • Iniciar Descanso ({currentExercise.restSeconds}s)
+            </button>
+          </div>
+        )}
+
+        {/* If all sets for this exercise are done */}
+        {!activeSet && (
+          <div className="bg-emerald-950/30 border border-emerald-500/40 p-4 rounded-3xl text-center space-y-2">
+            <div className="text-emerald-400 font-bold text-sm flex items-center justify-center gap-1.5">
+              <Check size={18} strokeWidth={3} /> Todas as séries de {currentExercise.exerciseName} concluídas!
+            </div>
+            {hasNextExercise ? (
+              <button
+                onClick={() => setActiveExIdx(activeExIdx + 1)}
+                className="px-5 py-2.5 rounded-xl bg-[#CCFF00] text-black font-black text-xs uppercase flex items-center justify-center gap-1.5 mx-auto active:scale-95 transition-all shadow-md shadow-[#CCFF00]/20"
+              >
+                Ir para o Próximo Exercício ({activeSession.exercises[activeExIdx + 1]?.exerciseName}) <ChevronRight size={16} />
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowFinishModal(true)}
+                className="px-5 py-2.5 rounded-xl bg-[#CCFF00] text-black font-black text-xs uppercase flex items-center justify-center gap-1.5 mx-auto active:scale-95 transition-all shadow-md"
+              >
+                Finalizar Treino Completo 🎉
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 4. Sets Table */}
         <div className="bg-[#13131a] border border-zinc-800 rounded-3xl overflow-hidden">
           <div className="p-3.5 bg-[#171722] border-b border-zinc-800 flex items-center justify-between text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
             <div className="w-10 text-center">Série</div>
             <div className="w-24 text-center">Anterior</div>
             <div className="flex-1 text-center">Carga (kg)</div>
             <div className="w-20 text-center">Reps</div>
-            <div className="w-12 text-center">Check</div>
+            <div className="w-12 text-center">Status</div>
           </div>
 
           <div className="divide-y divide-zinc-800/60">
             {currentExercise.sets.map((set, setIdx) => {
+              const isCurrentFocus = setIdx === activeSetIndex;
+
               return (
                 <div
                   key={set.id}
                   className={`p-3 flex items-center gap-2 transition-all ${
-                    set.completed ? 'bg-emerald-950/15' : 'hover:bg-zinc-800/20'
+                    set.completed
+                      ? 'bg-emerald-950/20'
+                      : isCurrentFocus
+                      ? 'bg-[#CCFF00]/5 border-l-2 border-l-[#CCFF00]'
+                      : 'hover:bg-zinc-800/20'
                   }`}
                 >
                   {/* Set Number */}
@@ -363,7 +590,7 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
                           ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/30'
                           : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-zinc-200 border border-zinc-700'
                       }`}
-                      title={set.completed ? 'Série concluída' : 'Marcar série concluída'}
+                      title={set.completed ? 'Série concluída (clique para reabrir)' : 'Concluir série e descansar'}
                     >
                       <Check size={18} strokeWidth={3} />
                     </button>
@@ -383,10 +610,10 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
             </button>
 
             <button
-              onClick={() => startRestTimer(currentExercise.restSeconds, currentExercise.exerciseName)}
+              onClick={() => adjustRestTimer(30)}
               className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-zinc-800 transition-all"
             >
-              <Clock size={14} className="text-zinc-400" /> Iniciar Descanso ({currentExercise.restSeconds}s)
+              <Clock size={14} className="text-zinc-400" /> +30s Descanso
             </button>
           </div>
         </div>
@@ -430,10 +657,48 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
         </div>
       </div>
 
+      {/* 5. REST FINISHED ALERT MODAL (O SINAL PARA RECOMEÇAR) */}
+      {restTimer.isFinishedAlertOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#12121a] border-2 border-[#CCFF00] rounded-3xl w-full max-w-sm p-6 text-center space-y-4 shadow-2xl shadow-[#CCFF00]/20 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-3xl bg-[#CCFF00]/20 text-[#CCFF00] border-2 border-[#CCFF00] flex items-center justify-center mx-auto shadow-lg shadow-[#CCFF00]/30 animate-bounce">
+              <BellRing size={32} />
+            </div>
+
+            <div>
+              <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#CCFF00] block mb-1">
+                SINAL DE DESCANSO CONCLUÍDO
+              </span>
+              <h3 className="text-2xl font-black text-white tracking-tight">
+                Hora da Próxima Série!
+              </h3>
+              <p className="text-xs text-zinc-300 mt-1">
+                Seu tempo de recuperação terminou. Concentre-se e mantenha a técnica!
+              </p>
+            </div>
+
+            <div className="bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-2xl text-xs space-y-1">
+              <div className="text-zinc-400 font-semibold">{currentExercise.exerciseName}</div>
+              <div className="font-mono-numbers text-base font-black text-[#CCFF00]">
+                Série #{restTimer.nextSetNumber || (activeSetIndex + 1 || 2)} de {currentExercise.sets.length}
+              </div>
+            </div>
+
+            <button
+              onClick={dismissRestFinishedAlert}
+              className="w-full py-4 rounded-2xl bg-[#CCFF00] hover:bg-[#b8e600] active:scale-95 text-black font-black text-sm uppercase tracking-wide shadow-xl shadow-[#CCFF00]/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Play size={18} fill="black" />
+              Bora pra Série #{restTimer.nextSetNumber || (activeSetIndex + 1 || 2)}! 🚀
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MODAL 1: Substituir Exercício */}
       {showReplaceModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121218] border border-zinc-800 rounded-3xl w-full max-w-md p-5 space-y-4 max-h-[85vh] flex flex-col">
+          <div className="bg-[#12121a] border border-zinc-800 rounded-3xl w-full max-w-md p-5 space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-base text-white">Substituir Exercício</h3>
@@ -475,7 +740,7 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
         </div>
       )}
 
-      {/* MODAL 2: Sinalizar Dor / Desconforto (Safety requirement 10) */}
+      {/* MODAL 2: Sinalizar Dor / Desconforto */}
       {showDiscomfortModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#14141c] border border-amber-500/40 rounded-3xl w-full max-w-md p-5 space-y-4">
@@ -514,7 +779,6 @@ export const LiveWorkoutView: React.FC<LiveWorkoutViewProps> = ({ onClose }) => 
               <button
                 onClick={() => {
                   setShowDiscomfortModal(false);
-                  // advance to next exercise if available
                   if (activeExIdx < activeSession.exercises.length - 1) {
                     setActiveExIdx(activeExIdx + 1);
                   }

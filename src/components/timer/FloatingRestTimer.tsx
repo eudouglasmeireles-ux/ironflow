@@ -1,9 +1,63 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { Play, Pause, FastForward, Plus, Minus, Timer } from 'lucide-react';
+import { Play, Pause, FastForward, Plus, Minus, Timer, BellRing, Check } from 'lucide-react';
 
-export const FloatingRestTimer: React.FC = () => {
-  const { restTimer, adjustRestTimer, skipRestTimer, pauseRestTimer, resumeRestTimer } = useApp();
+interface FloatingRestTimerProps {
+  onOpenLiveWorkout?: () => void;
+}
+
+export const FloatingRestTimer: React.FC<FloatingRestTimerProps> = ({ onOpenLiveWorkout }) => {
+  const {
+    restTimer,
+    adjustRestTimer,
+    skipRestTimer,
+    pauseRestTimer,
+    resumeRestTimer,
+    dismissRestFinishedAlert
+  } = useApp();
+
+  // If finished alert is open and timer is not active
+  if (restTimer.isFinishedAlertOpen) {
+    return (
+      <div className="fixed bottom-20 left-4 right-4 z-50 max-w-md mx-auto animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="bg-[#121218] border-2 border-[#CCFF00] rounded-2xl p-3.5 shadow-2xl shadow-[#CCFF00]/20 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#CCFF00]/20 text-[#CCFF00] flex items-center justify-center shrink-0 border border-[#CCFF00]">
+              <BellRing size={20} className="animate-bounce" />
+            </div>
+            <div>
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-[#CCFF00]">
+                DESCANSO CONCLUÍDO!
+              </div>
+              <div className="text-xs font-bold text-white">
+                Hora da próxima série {restTimer.nextSetNumber ? `(#${restTimer.nextSetNumber})` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onOpenLiveWorkout && (
+              <button
+                onClick={() => {
+                  dismissRestFinishedAlert();
+                  onOpenLiveWorkout();
+                }}
+                className="px-3 py-1.5 rounded-xl bg-[#CCFF00] text-black font-extrabold text-xs shadow-md shadow-[#CCFF00]/30 active:scale-95 transition-all"
+              >
+                Ir pro Treino
+              </button>
+            )}
+            <button
+              onClick={dismissRestFinishedAlert}
+              className="w-8 h-8 rounded-xl bg-zinc-800 text-zinc-300 hover:text-white flex items-center justify-center text-xs"
+            >
+              <Check size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!restTimer.isActive) return null;
 

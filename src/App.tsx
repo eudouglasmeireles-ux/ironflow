@@ -85,7 +85,9 @@ const MainAppContent: React.FC = () => {
       </main>
 
       {/* Floating Rest Timer (persists across all non-live screens if active) */}
-      {!isLiveWorkoutOpen && <FloatingRestTimer />}
+      {!isLiveWorkoutOpen && (
+        <FloatingRestTimer onOpenLiveWorkout={() => setIsLiveWorkoutOpen(true)} />
+      )}
 
       {/* Bottom Navigation */}
       {!isLiveWorkoutOpen && (
